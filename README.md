@@ -1,203 +1,71 @@
-# portscan
+# `portscan`
 
-A continuous network port scanner written in C++17. Uses **masscan** for fast host/port discovery and **nmap** for service and banner detection. Results are stored in **SQLite** and new or changed ports/services trigger a **Telegram** notification.
+A continuous network port scanner. Uses **masscan** for fast host/port discovery and **nmap** for service and banner detection.
 
----
+## Usage
 
-## Features
+### Synopsis
+ 
+`masscan [OPTION]`
 
-- Continuous scan loop with configurable interval
-- Fast port discovery via masscan
-- Parallel service fingerprinting via nmap (banner grab + version detection)
-- SQLite storage — tracks `first_seen` / `last_seen` per port
-- Change detection: notifies only when something actually changes
-- Telegram Bot notifications with exact port and service details:
-  - New ports: `192.168.1.5:80/tcp  [http / Apache httpd 2.4.41]`
-  - Changed services: `192.168.1.5:80/tcp  [nginx 1.18 -> Apache httpd 2.4.41]`
-- Docker support — zero manual dependency setup
+### Options
 
----
+`-h, --help`. Show help.
 
-## Requirements (if used without Docker)
+`-c, --config <PATH>`. Provide filepath to the user config for `portscan`. 
+If not specified, `PATH` passed to the program is `./config.json`.
 
-`GCC ≥ 10 or Clang ≥ 11`
-`CMake ≥ 3.16`
-`masscan`
-`nmap`
-`libcurl (dev)`
-`libsqlite3 (dev)`
+### Config file
 
-`nlohmann/json` and `tinyxml2` are downloaded automatically by CMake on first build.
+`portscan` requires config file in JSON format with at least two values specified:
 
-Requires **root** or `CAP_NET_RAW` (masscan and nmap use raw sockets).
+1) CIDR formatted IP(s) / IP ranges / IP subnets;
+2) port(s) / port ranges.
 
----
+Other values are optional. Default values are applied if user doesn't provide them,
+see section below to find out which.
 
-## Quick Start with Docker (recommended)
+### Values format and description
 
-1. Clone the repository and enter the directory:
+**Format and defaults:**
 
-```bash
-git clone https://github.com/MahiroCh/portscanner
-cd portscanner
-```
+See `config.example.json` file for all possible values and example formats.
 
-2. Edit `config.json` — set your CIDR ranges and Telegram credentials (see [Configuration](#configuration)).
-
-3. Build and run:
-
-```bash
-docker compose up --build
-```
-
-The scanner starts immediately. Logs go to stdout. The SQLite database is saved to `./data/portscan.db` on your host.
-
-To stop: `Ctrl+C` or `docker compose down`.
-
----
-
-## Manual Build (without Docker)
-
-```bash
-sudo apt install -y build-essential cmake masscan nmap libcurl4-openssl-dev libsqlite3-dev
-
-git clone https://github.com/MahiroCh/portscanner
-cd portscanner
-mkdir build && cd build
-cmake ..
-make -j$(nproc)
-```
-
-Run:
-
-```bash
-sudo ./build/portscan -c config.json
-```
-
----
-
-## Configuration
-
-All settings are in `config.json`:
-
-```json
-{
-  "cidr_ranges": ["192.168.1.0/24"],
-  "ports": ["21-23", "80", "443", "8080"],
-  "scan_interval_seconds": 120,
-  "db_path": "portscan.db",
-  "telegram_bot_token": "YOUR_BOT_TOKEN",
-  "telegram_chat_id": "YOUR_CHAT_ID"
-}
-```
-
-| Field | Description | Required |
+| Field | Type | Default if not specified by user |
 |---|---|---|
-| `cidr_ranges` | List of CIDR ranges to scan | Yes |
-| `ports` | Port list or ranges: `"80"`, `"1-1024"` | Yes |
-| `scan_interval_seconds` | Seconds between full scan cycles | No (default: `120`) |
-| `db_path` | Path to SQLite database file | No (default: `"portscan.db"`) |
-| `telegram_bot_token` | Bot token from @BotFather | Yes |
-| `telegram_chat_id` | Chat or group ID to receive alerts | Yes |
+| `cidrs` | `string[]` | — (required) |
+| `ports` | `string[]` | — (required) |
+| `scan_interval` | `int` | `120` seconds |
+| `masscan_rate` | `int` | `300` pkts/s |
+| `nmap_threads` | `int` | `1` |
+| `db_path` | `string` | `"portscan.db"` |
+| `telegram_bot_token` | `string` | `""` (disabled) |
+| `telegram_chat_id` | `string` | `""` (disabled) |
 
-### Getting a Telegram bot token and chat ID
+**Description of each value:**
 
-1. Open [@BotFather](https://t.me/BotFather) in Telegram → `/newbot` → copy the token.
-2. Add the bot to your chat or group.
-3. Send any message to the bot, then open `https://api.telegram.org/bot<TOKEN>/getUpdates` — the `chat.id` field contains your chat ID.
+1) `cidrs`. **Required.** List of IP addresses, ranges, or subnets in CIDR notation to scan.  
+   Each element is a separate entry — you can mix single IPs (`"192.168.1.1"`), ranges (`"192.168.1.1-192.168.1.10"`), and subnets (`"192.168.0.0/16"`).  
 
----
+2) `ports`. **Required.** List of ports or port ranges to scan.  
+   Each element is a separate entry — single ports (`"443"`) and ranges (`"8000-9000"`) are both valid.  
 
-## How It Works
+3) `scan_interval`. Interval in seconds between scan cycles.  
+   After each full scan completes, the program waits this long before starting the next one.  
 
-```
-while running:
-  1. masscan  → discover open ports in CIDR ranges
-  2. nmap     → fingerprint each port (parallel, 8 threads)
-  3. SQLite   → compare with stored state
-  4. Telegram → notify if new ports or service changes found
-  5. sleep    → wait for next cycle
-```
+4) `masscan_rate`. Number of packets per second masscan should send.  
+   Higher values scan faster but may overwhelm your network. For home networks `100`–`500` is safe; for controlled environments you can go up to `10000` or more.  
 
-### masscan
+5) `nmap_threads`. Number of concurrent nmap processes to run during service detection.  
+   Higher values speed up fingerprinting but use more CPU.  
 
-Launched as a child process via `fork`/`execvp` with XML output:
+6) `db_path`. File path to the SQLite database where scan results are stored.  
+   The database is created automatically if it doesn't exist.  
 
-```
-masscan <cidr...> -p <ports> --rate 1000 -oX /tmp/masscan_out_<pid>.xml --wait 3
-```
+7) `telegram_bot_token`. Telegram Bot API token for sending notifications.  
+   Leave empty (`""`) to disable Telegram notifications.  
+   To create a bot and get a token, talk to [@BotFather](https://t.me/BotFather) on Telegram.  
 
-XML is parsed with **tinyxml2**.
-
-### nmap
-
-One nmap process per port, run in parallel (thread pool, 8 workers):
-
-```
-nmap -sT -sV --script=banner -p <port> -oX /tmp/nmap_<ip>_<port>_<pid>.xml --open -Pn -n --version-intensity 5 <ip>
-```
-
-### SQLite schema
-
-```sql
-CREATE TABLE services (
-  ip           TEXT NOT NULL,
-  port         INTEGER NOT NULL,
-  protocol     TEXT NOT NULL,
-  service_name TEXT DEFAULT '',
-  product      TEXT DEFAULT '',
-  version      TEXT DEFAULT '',
-  banner       TEXT DEFAULT '',
-  first_seen   TEXT NOT NULL,
-  last_seen    TEXT NOT NULL,
-  PRIMARY KEY (ip, port, protocol)
-);
-```
-
-### Telegram notification format
-
-```
-Port Scan Update
-
-New open ports (2):
-  • 192.168.1.10:80/tcp  [http / Apache httpd 2.4.41]
-  • 192.168.1.15:22/tcp  [ssh / OpenSSH 8.9p1]
-
-Changed services (1):
-  • 192.168.1.10:443/tcp  [nginx 1.18.0 -> https / nginx 1.24.0]
-```
-
----
-
-## Project Structure
-
-```
-portscanner/
-├── CMakeLists.txt
-├── Dockerfile
-├── docker-compose.yml
-├── config.json
-├── README.md
-├── include/
-│   ├── config.hpp
-│   ├── scanner.hpp
-│   ├── service_detector.hpp
-│   ├── database.hpp
-│   └── notifier.hpp
-└── src/
-    ├── main.cpp
-    ├── config.cpp
-    ├── scanner.cpp
-    ├── service_detector.cpp
-    ├── database.cpp
-    └── notifier.cpp
-```
-
----
-
-## Limitations
-
-- Requires root (or `CAP_NET_RAW`) — masscan and nmap use raw sockets.
-- High `masscan_rate` on large CIDR ranges can saturate the network or be flagged as an attack. Use responsibly and only on networks you own or have permission to scan.
-- UDP scanning (`-sU` in nmap) is slow by nature; the default port list in `config.json` targets TCP only.
-
+8) `telegram_chat_id`. Telegram chat (user or group) ID to send notifications to.  
+   Leave empty (`""`) if Telegram is disabled.  
+   To find your chat ID, send a message to your bot and visit `https://api.telegram.org/bot<YourToken>/getUpdates`.  

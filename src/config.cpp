@@ -1,52 +1,101 @@
 #include "config.hpp"
-#include <nlohmann/json.hpp>
+#include "minjsoncpp.hpp"
+
 #include <fstream>
+#include <sstream>
 #include <stdexcept>
 
-using json = nlohmann::json;
+namespace usrcfg {
+
+// =============================================================================
+// Implementations
+// =============================================================================
+
+// === Config ===
 
 Config load_config(const std::string& path) {
-  std::ifstream f(path);
-  if (!f.is_open()) {
-    throw std::runtime_error("Не удалось открыть файл конфигурации: " + path);
+  std::ifstream file(path);
+  if (!file) {
+    throw std::runtime_error("Failed to open configuration file: " + path);
   }
 
-  json j;
-  try {
-    f >> j;
-  } catch (const json::exception& e) {
-    throw std::runtime_error(std::string("Ошибка разбора JSON: ") + e.what());
+  std::ostringstream ss;
+  ss << file.rdbuf();
+  file.close();
+  // TODO: There are different kinds of parse statuses and errors? that can be 
+  // ignored or not. Check it: https://github.com/toughengineer/minjsoncpp#parsing
+  auto json_content = minjson::parse(ss.str());
+
+  if (json_content.status == minjson::ParsingResultStatus::Failure) {
+    std::ostringstream ss;
+    ss << "JSON parse failed\n";
+    for (const auto &issue : json_content.issues) {
+      ss << "offset " << issue.offset << ": "
+         << issue.description << "\n";
+    }
+    throw std::runtime_error(ss.str());
   }
 
+  const minjson::Value &json_root = json_content.value;
   Config cfg;
 
-  // Обязательные поля
-  if (!j.contains("cidr_ranges") || !j["cidr_ranges"].is_array())
-    throw std::runtime_error("В конфиге отсутствует массив 'cidr_ranges'");
-  for (const auto& r : j["cidr_ranges"])
-    cfg.cidr_ranges.push_back(r.get<std::string>());
+  if (const auto *scan_interval = json_root.resolve("scan_interval");
+      scan_interval
+  ) {
+    cfg.scan_interval = scan_interval->asInt();
+  }
 
-  if (!j.contains("ports") || !j["ports"].is_array())
-    throw std::runtime_error("В конфиге отсутствует массив 'ports'");
-  for (const auto& p : j["ports"])
-    cfg.ports.push_back(p.get<std::string>());
+  if (const auto *db_path = json_root.resolve("db_path");
+      db_path
+  ) {
+    cfg.db_path = db_path->asString();
+  }
 
-  if (!j.contains("telegram_bot_token"))
-    throw std::runtime_error("В конфиге отсутствует 'telegram_bot_token'");
-  cfg.telegram_bot_token = j["telegram_bot_token"].get<std::string>();
+  if (const auto *telegram_bot_token = json_root.resolve("telegram_bot_token");
+      telegram_bot_token
+  ) {
+    cfg.telegram_bot_token = telegram_bot_token->asString();
+  }
 
-  if (!j.contains("telegram_chat_id"))
-    throw std::runtime_error("В конфиге отсутствует 'telegram_chat_id'");
-  cfg.telegram_chat_id = j["telegram_chat_id"].get<std::string>();
+  if (const auto *telegram_chat_id = json_root.resolve("telegram_chat_id");
+      telegram_chat_id
+  ) {
+    cfg.telegram_chat_id = telegram_chat_id->asString();
+  }
 
-  // Необязательные поля с умолчаниями
-  cfg.scan_interval_seconds = j.value("scan_interval_seconds", 120);
-  cfg.db_path               = j.value("db_path", "portscan.db");
+  if (const auto *masscan_rate = json_root.resolve("masscan_rate");
+      masscan_rate
+  ) {
+    cfg.masscan_rate = masscan_rate->asInt();
+  }
 
-  if (cfg.cidr_ranges.empty())
-    throw std::runtime_error("'cidr_ranges' не должен быть пустым");
-  if (cfg.ports.empty())
-    throw std::runtime_error("'ports' не должен быть пустым");
+  if (const auto *nmap_threads = json_root.resolve("nmap_threads");
+      nmap_threads
+  ) {
+    cfg.nmap_threads = nmap_threads->asInt();
+  }
+
+  if (const auto *cidrs = json_root.resolve("cidrs");
+      cidrs && cidrs->isArray()
+  ) {
+    for (const auto &r : cidrs->asArray()) {
+      cfg.cidrs.push_back(r.asString());
+    }
+  } else {
+    throw std::runtime_error("Config is missing CIDR ranges for scan or it is not an array");
+  }
+  
+  if (const auto *ports = json_root.resolve("ports");
+      ports && ports->isArray()
+  ) {
+    for (const auto &p : ports->asArray()) {
+      cfg.ports.push_back(p.asString());
+    }
+  } else {
+    throw std::runtime_error("Config is missing ports for scan or it is not an array");
+  }
 
   return cfg;
 }
+
+} // namespace

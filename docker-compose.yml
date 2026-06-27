@@ -1,13 +1,11 @@
+name: portscanner
 services:
-  portscan:
+  main:
+    stdin_open: true
     build: .
-    network_mode: host
     cap_add:
       - NET_ADMIN
       - NET_RAW
     volumes:
-      # Монтируем пользовательский config для программы
-      - ./config.json:/app/config.json:ro
-      # Монтируем директорию для сохранения базы данных между перезапусками
-      - ./data:/app
-    restart: unless-stopped
+      - /etc/localtime:/etc/localtime:ro
+      - ./data:/portscan/data:rw

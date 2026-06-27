@@ -1,0 +1,19 @@
+{
+  "// NOTE": "RENAME THIS FILE TO `config.json` AND ADJUST THE VALUES. THEN REMOVE THIS LINE.",
+
+  "cidrs": [
+    "10.0.0.0/16",
+    "10.0.0.1-10.0.0.100",
+    "192.168.1.15"
+  ],
+  "ports": [
+    "443",
+    "8080-8090"
+  ],
+  "scan_interval": 120,
+  "masscan_rate": 1000,
+  "nmap_threads": 10,
+  "db_path": "portscan.db",
+  "telegram_bot_token": "123456789:AAFoxxxxn0hwA-2TVSxxxNf4c",
+  "telegram_chat_id": "1122445"
+}

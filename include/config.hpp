@@ -3,17 +3,21 @@
 #include <string>
 #include <vector>
 
-// Конфигурация программы, загружаемая из JSON-файла.
-// masscan_rate и nmap_threads вынесены как константы в scanner.cpp / service_detector.cpp.
-struct Config {
-  std::vector<std::string> cidr_ranges;  // IP-диапазоны для сканирования в формате CIDR
-  std::vector<std::string> ports;        // Список портов/диапазонов: "80", "1-1024", "443"
-  int scan_interval_seconds;             // Интервал между циклами сканирования (секунды)
-  std::string telegram_bot_token;        // Токен Telegram-бота
-  std::string telegram_chat_id;          // ID чата для отправки уведомлений
-  std::string db_path;                   // Путь к файлу базы данных SQLite
+namespace usrcfg {
+
+class Config {
+public:
+  std::vector<std::string> cidrs;      // IP-ranges for scan in CIDR format.
+  std::vector<std::string> ports;      // List of ports and port ranges: "80", "1-1024", "443".
+  std::string telegram_bot_token = ""; // Telegram-bot token.
+  std::string telegram_chat_id = "";   // Telegram chat ID to send notifications to.
+  std::string db_path = "portscan.db"; // Filepath to SQLite database.
+  int scan_interval = 120;             // Interval between scans in seconds.
+  int masscan_rate = 300;              // Masscan rate in packets/second.
+  int nmap_threads = 1;                // Number of Nmap concurrent threads to use during scan.
 };
 
-// Загружает конфигурацию из JSON-файла.
-// Выбрасывает std::runtime_error при ошибке чтения или валидации.
+// Load user-provided config into this program from JSON file.
 Config load_config(const std::string& path);
+
+} // namespace

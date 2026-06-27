@@ -1,41 +1,35 @@
-# Этап 1 — компиляция
+# === Compilation stage ===
 
 FROM ubuntu:22.04 AS builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-  build-essential \
   cmake \
   git \
-  ca-certificates \
-  libcurl4-openssl-dev \
-  libsqlite3-dev \
-  && rm -rf /var/lib/apt/lists/*
+  build-essential
 
-WORKDIR /src
+WORKDIR /portscan
 COPY . .
 
 RUN cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
   && cmake --build build
 
-# Этап 2 — запуск (не содержит инструменты для сборки, только runtime)
+# === Runtime stage ===
 
 FROM ubuntu:22.04
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
   masscan \
-  nmap \
-  libcurl4 \
-  libsqlite3-0 \
-  ca-certificates \
-  && rm -rf /var/lib/apt/lists/*
+  nmap
 
-COPY --from=builder /src/build/portscan /app/portscan
+COPY --from=builder /portscan/build/executable /portscan/executable
 
-# Пользовательский конфиг для настройки программы
-# На случай, если будет запускаться без docker-compose.
-COPY config.json /app/config.json
+COPY data/config.json /portscan/data/config.json
 
-# База данных будет создана в /app/portscan.db
-# Рекомендуется монтировать /app как volume для сохранения данных
+WORKDIR /portscan
 
-ENTRYPOINT ["/app/portscan", "-c", "/app/config.json"]
+# Run /portscan/executable -c /portscan/data/config.json.
+ENTRYPOINT ["/portscan/executable"]
+CMD ["-c", "/portscan/data/config.json"]
+
+# For debug.
+# ENTRYPOINT ["/bin/bash"]

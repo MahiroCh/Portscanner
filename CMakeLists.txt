@@ -8,7 +8,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 add_executable(executable
   src/main.cpp
   src/config.cpp
-  src/scanner.cpp
+  src/subnet_scanner.cpp
   src/database.cpp
   src/notifier.cpp
   src/service_detector.cpp
@@ -18,6 +18,6 @@ target_include_directories(executable PRIVATE
   ${CMAKE_SOURCE_DIR}/include
 )
 
-target_compile_options(portscan PRIVATE
+target_compile_options(executable PRIVATE
   -Wall -Wextra -Wpedantic
 )

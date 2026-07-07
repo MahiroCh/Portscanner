@@ -1,4 +1,4 @@
-#include "subnet_scanner.hpp"
+#include "network_utils.hpp"
 #include "rapidxml.hpp"
 
 #include <unistd.h>
@@ -11,7 +11,7 @@
 namespace scanner {
 
 // =============================================================================
-// Logic
+// Logic.
 // =============================================================================
 
 ScanResult run_masscan(const Config& cfg) {
@@ -20,8 +20,7 @@ ScanResult run_masscan(const Config& cfg) {
     throw std::runtime_error("fork() for masscan program failed");
   } else if (pid == 0) {
     // Command to be called: 
-    //
-    //   masscan --ports <ports/port ranges> <cidr ranges>
+    //   masscan --ports <ports/port ranges> <CIDR IPs/IP ranges>
     //           --rate <rate> --output-format xml --output-filename <file_path>
 
     ArgvBuilder cmd("masscan");
@@ -29,7 +28,7 @@ ScanResult run_masscan(const Config& cfg) {
     cmd.add("", cfg.cidrs);
     cmd.add("--rate", cfg.rate);
     cmd.add("--output-format", cfg.output_file_format);
-    cmd.add("--output-filename", cfg.output_file_path);
+    cmd.add("--output-filename", cfg.output_file_path + "." + cfg.output_file_format);
 
     char* const* argv = cmd.get_argv();
     if (execvp(argv[0], argv)) {
@@ -42,7 +41,7 @@ ScanResult run_masscan(const Config& cfg) {
   int status;
   waitpid(pid, &status, 0);
   
-  return parse_xml(cfg.output_file_path);
+  return scanner::parse_xml(cfg.output_file_path + "." + cfg.output_file_format);
 }
 
 ScanResult parse_xml(const std::string& path) {
@@ -97,7 +96,9 @@ ScanResult parse_xml(const std::string& path) {
   xml_content.parse<0>(ss.data()); 
 
   rapidxml::xml_node<>* root = xml_content.first_node("nmaprun");
-  if (!root) return;
+  if (!root) {
+    throw std::runtime_error("Non-valid XML file produced my masscan");
+  }
 
   for (rapidxml::xml_node<>* host = root->first_node("host");
        host; host = host->next_sibling("host")) {
@@ -110,11 +111,12 @@ ScanResult parse_xml(const std::string& path) {
     rapidxml::xml_node<>* ports_node = host->first_node("ports");
     if (!ports_node) continue;
 
+    std::vector<unsigned int> ports;
+
     for (rapidxml::xml_node<>* port_node = ports_node->first_node("port");
          port_node; port_node = port_node->next_sibling("port")) {
-      rapidxml::xml_attribute<>* protocol_attr = port_node->first_attribute("protocol");
-      rapidxml::xml_attribute<>* portid_attr   = port_node->first_attribute("portid");
-      if (!protocol_attr || !portid_attr) continue;
+      rapidxml::xml_attribute<>* portid_attr = port_node->first_attribute("portid");
+      if (!portid_attr) continue;
 
       rapidxml::xml_node<>* state_node = port_node->first_node("state");
       if (!state_node) continue;
@@ -122,21 +124,19 @@ ScanResult parse_xml(const std::string& path) {
       rapidxml::xml_attribute<>* state_attr = state_node->first_attribute("state");
       if (!state_attr || std::strcmp(state_attr->value(), "open") != 0) continue;
 
-      std::string transport = protocol_attr->value();
-      int port = std::atoi(portid_attr->value());
-
-      scan_result.add(ip, port, transport);
+      ports.emplace_back(std::atoi(portid_attr->value()));
     }
+    scan_result.add(ip, ports);
   }
 
   return scan_result;
 }
 
 // =============================================================================
-// Implementations
+// Implementations.
 // =============================================================================
 
-// === Config ===
+// === Config. ===
 
 void Config::load_config(const usrcfg::Config& ucfg) {
   if (ucfg.cidrs.empty()) {
@@ -148,46 +148,6 @@ void Config::load_config(const usrcfg::Config& ucfg) {
   cidrs = ucfg.cidrs;
   ports = ucfg.ports;
   rate = ucfg.masscan_rate;
-}
-
-// === ArgvBuilder ===
-
-ArgvBuilder::ArgvBuilder(const std::string& program) {
-  stred_args.push_back(program);
-}
-
-void ArgvBuilder::add(const std::string& i) {
-  stred_args.push_back(i);
-}
-
-void ArgvBuilder::add(const std::string& flag, const std::string& value) {
-  stred_args.push_back(flag);
-  stred_args.push_back(value);
-}
-
-void ArgvBuilder::add(const std::string& flag, const unsigned int& value) {
-  stred_args.push_back(flag);
-  stred_args.push_back(std::to_string(value));
-}
-
-void ArgvBuilder::add(const std::string& flag, const std::vector<std::string>& list) {
-  if (list.empty()) return;
-  std::string str_concat = list[0];
-  for (size_t i = 1; i < list.size(); ++i) {
-    str_concat += "," + list[i];
-  }
-  if (!flag.empty()) stred_args.push_back(flag);
-  stred_args.push_back(str_concat);
-}
-
-char* const* ArgvBuilder::get_argv() {
-  chared_args.clear();
-  chared_args.reserve(stred_args.size() + 1);
-  for (auto& str : stred_args) {
-    chared_args.push_back(const_cast<char*>(str.c_str()));
-  }
-  chared_args.push_back(nullptr);
-  return chared_args.data();
 }
 
 } // namespace

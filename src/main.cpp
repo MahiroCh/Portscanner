@@ -1,6 +1,5 @@
 #include "config.hpp"
-#include "subnet_scanner.hpp"
-#include "service_detector.hpp"
+#include "network_utils.hpp"
 #include "database.hpp"
 #include "notifier.hpp"
 #include "cxxopts.hpp"
@@ -17,6 +16,8 @@ static void handle_signal(int) {
 }
 
 int main(int argc, char* argv[]) {
+  std::cout << std::unitbuf;
+  
   cxxopts::Options options("portscan", "Utility that scans specified network ranges for open ports");
   options.add_options()
     ("c,config", "Path to portscan JSON config file", cxxopts::value<std::string>()->default_value("./config.json"))
@@ -31,7 +32,7 @@ int main(int argc, char* argv[]) {
     std::cerr << "Configuration error: " << e.what() << std::endl;
     return 1;
   }
-  std::cout << "User configuration loaded successfully\n";
+  std::cout << "User configuration loaded successfully.\n";
 
   // TODO: Add loop with cfg-specified time interval between scans.
 
@@ -45,4 +46,16 @@ int main(int argc, char* argv[]) {
 
   scanner::ScanResult masscan_out = scanner::run_masscan(scan_cfg);
   detector::DetectResult nmap_out = detector::run_nmap(detect_cfg, masscan_out);
+
+  std::cout << "\n=== Scan results ===\n";
+  for (auto& svc : nmap_out) {
+    std::cout << svc.ip << ':' << svc.port
+              << "  service=" << svc.service_name
+              << "  product=" << svc.product
+              << "  version=" << svc.version
+              << "  extrainfo=" << svc.extrainfo
+              << '\n';
+  }
+  std::cout << "Total: " << nmap_out.size() << " open service(s)\n";
+
 }

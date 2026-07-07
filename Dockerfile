@@ -8,7 +8,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   build-essential
 
 WORKDIR /portscan
-COPY . .
+COPY --exclude=build . .
 
 RUN cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
   && cmake --build build

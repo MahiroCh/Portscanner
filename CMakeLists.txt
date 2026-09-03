@@ -5,13 +5,16 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-add_executable(executable
-  src/main.cpp
-  src/config.cpp
-  src/subnet_scanner.cpp
-  src/database.cpp
-  src/notifier.cpp
-  src/service_detector.cpp
+add_executable(exe
+  portscanner/main.cpp
+  portscanner/config/builder.cpp
+  portscanner/config/parsers.cpp
+  portscanner/config/details/config_descriptors.cpp
+  portscanner/database.cpp
+  portscanner/notifier.cpp
+  portscanner/subnet_scanner.cpp
+  portscanner/service_detector.cpp
+  external/sqlite/sqlite3.c
 )
 
 target_include_directories(exe PRIVATE

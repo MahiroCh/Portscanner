@@ -1,4 +1,5 @@
-build
+.vscode
 .devcontainer
-data/config.json
-data/masscan.out.xml
+/build
+/config.json
+/run.sh

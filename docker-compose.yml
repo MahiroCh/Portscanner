@@ -3,9 +3,5 @@ services:
   main:
     stdin_open: true
     build: .
-    cap_add:
-      - NET_ADMIN
-      - NET_RAW
     volumes:
       - /etc/localtime:/etc/localtime:ro
-      - ./data:/portscan/data:rw

@@ -7,7 +7,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   git \
   build-essential
 
-WORKDIR /portscan
+WORKDIR /portscanner
 COPY --exclude=build . .
 
 RUN cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
@@ -21,15 +21,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   masscan \
   nmap
 
-COPY --from=builder /portscan/build/executable /portscan/executable
+COPY --from=builder /portscanner/build/exe /portscanner/exe
 
-COPY data/config.json /portscan/data/config.json
+COPY ./config.json /portscanner/config.json
 
-WORKDIR /portscan
+WORKDIR /portscanner
 
-# Run /portscan/executable -c /portscan/data/config.json.
-ENTRYPOINT ["/portscan/executable"]
-CMD ["-c", "/portscan/data/config.json"]
+ENTRYPOINT ["/portscanner/exe"]
+CMD ["-c", "/portscanner/config.json"]
 
 # For debug.
 # ENTRYPOINT ["/bin/bash"]
